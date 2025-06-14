@@ -6,6 +6,7 @@ as allowed by the Creative Common Attribution-NonCommercial-ShareAlike 3.0
 Unported [License](https://creativecommons.org/licenses/by-nc-sa/3.0/).
 """
 import typing
+from typing import TextIO, Iterable
 
 
 class VMWriter:
@@ -40,7 +41,7 @@ class VMWriter:
         "shiftleft", "shiftright",
     }
 
-    def __init__(self, output_stream: typing.TextIO) -> None:
+    def __init__(self, output_stream: TextIO) -> None:
         """Creates a new file and prepares it for writing VM commands."""
         self._out: TextIO = output_stream
 
