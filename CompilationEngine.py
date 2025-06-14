@@ -18,8 +18,13 @@ class CompilationEngine:
         self.symbol_table = SymbolTable()
         self.class_name: str = ""
 
-        if self.tokenizer.has_more_tokens():
-            self.tokenizer.advance()
+        # Prime the tokenizer and immediately compile the class. If the
+        # tokenizer has already advanced before this constructor is called,
+        # we should not advance it again.
+        if getattr(self.tokenizer, "_current_token", None) is None:
+            if self.tokenizer.has_more_tokens():
+                self.tokenizer.advance()
+        if getattr(self.tokenizer, "_current_token", None) is not None:
             self.compile_class()
 
     # ------------------------------------------------------------------
