@@ -52,3 +52,40 @@ def test_compile_basic_class():
         "  </class>",
     ]
     assert result == expected
+
+
+def test_compile_basic_class_pre_advanced():
+    code = "class Main { function void main() { return; } }"
+    tokenizer = JackTokenizer(io.StringIO(code))
+    tokenizer.advance()
+    output = io.StringIO()
+    CompilationEngine(tokenizer, output)
+    result = output.getvalue().strip().splitlines()
+    expected = [
+        "<class>",
+        "  <keyword> class </keyword>",
+        "  <identifier> Main </identifier>",
+        "  <symbol> { </symbol>",
+        "  <subroutineDec>",
+        "    <keyword> function </keyword>",
+        "    <keyword> void </keyword>",
+        "    <identifier> main </identifier>",
+        "    <symbol> ( </symbol>",
+        "    <parameterList>",
+        "      </parameterList>",
+        "    <symbol> ) </symbol>",
+        "    <subroutineBody>",
+        "      <symbol> { </symbol>",
+        "      <statements>",
+        "        <returnStatement>",
+        "          <keyword> return </keyword>",
+        "          <symbol> ; </symbol>",
+        "          </returnStatement>",
+        "        </statements>",
+        "      <symbol> } </symbol>",
+        "      </subroutineBody>",
+        "    </subroutineDec>",
+        "  <symbol> } </symbol>",
+        "  </class>",
+    ]
+    assert result == expected
