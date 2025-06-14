@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 import typing
 
+from errors import JackSyntaxError
+
 
 class JackTokenizer:
     """Tokenizes Jack source code for consumption by a compilation engine."""
@@ -31,21 +33,38 @@ class JackTokenizer:
     # Tokenization utilities
     # ------------------------------------------------------------------
     def _tokenize(self, text: str) -> list[str]:
-        """Return a list of tokens extracted from ``text``."""
+        """Return a list of tokens extracted from ``text``.
+
+        Raises:
+            JackSyntaxError: If an illegal character is encountered.
+        """
 
         def remove_comments(source: str) -> str:
             source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
             source = re.sub(r"//.*", "", source)
             return source
 
-        cleaned_text = remove_comments(text)
+        cleaned = remove_comments(text)
         tokens: list[str] = []
-        for line in cleaned_text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            parts = re.findall(r'[{}\[\]()\.,;\+\-\*/&|<>=~]|\w+|\".*?\"', line)
-            tokens.extend(parts)
+        token_re = re.compile(
+            r"[{}\[\]()\.,;\+\-\*/&|<>=~]|\d+|[A-Za-z_]\w*|\"[^\"]*\""
+        )
+
+        for line_no, line in enumerate(cleaned.splitlines(), start=1):
+            pos = 0
+            while pos < len(line):
+                if line[pos].isspace():
+                    pos += 1
+                    continue
+                match = token_re.match(line, pos)
+                if not match:
+                    char = line[pos]
+                    raise JackSyntaxError(
+                        f"Invalid character {char!r} on line {line_no}"
+                    )
+                tokens.append(match.group(0))
+                pos = match.end()
+
         return tokens
 
 
@@ -64,7 +83,7 @@ class JackTokenizer:
         """Return the Jack classification of the current token."""
 
         if self._current_token is None:
-            raise ValueError("No current token. Call advance() first.")
+            raise JackSyntaxError("No current token. Call advance() first.")
 
         token = self._current_token
         if token in self._KEYWORDS:

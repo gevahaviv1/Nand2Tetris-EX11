@@ -8,6 +8,7 @@ tokens and ``VMWriter`` for writing the resulting commands.
 from JackTokenizer import JackTokenizer
 from VMWriter import VMWriter
 from SymbolTable import SymbolTable
+from errors import JackSyntaxError
 
 
 class CompilationEngine:
@@ -223,7 +224,7 @@ class CompilationEngine:
             else:
                 self._push_var(ident)
         else:
-            raise ValueError("Unexpected term")
+            raise JackSyntaxError("Unexpected term")
 
     def compile_expression_list(self) -> int:
         n_args = 0
@@ -238,7 +239,7 @@ class CompilationEngine:
 
     def compile_subroutine_call(self) -> None:
         if not self._is_identifier():
-            raise ValueError("Expected identifier in subroutine call")
+            raise JackSyntaxError("Expected identifier in subroutine call")
         ident = self._expect_type("IDENTIFIER")
         self._compile_subroutine_call_with_peek(ident)
 
@@ -319,14 +320,18 @@ class CompilationEngine:
 
     def _expect_type(self, ttype: str) -> str:
         if self.tokenizer.token_type() != ttype:
-            raise ValueError(f"Expected {ttype}, got {self.tokenizer.token_type()}")
+            raise JackSyntaxError(
+                f"Expected {ttype}, got {self.tokenizer.token_type()}"
+            )
         value = self.tokenizer.get_token_string()
         self.tokenizer.advance()
         return value
 
     def _expect_value(self, value: str) -> None:
         if self.tokenizer.get_token_string() != value:
-            raise ValueError(f"Expected '{value}', got '{self.tokenizer.get_token_string()}'")
+            raise JackSyntaxError(
+                f"Expected '{value}', got '{self.tokenizer.get_token_string()}'"
+            )
         self.tokenizer.advance()
 
     # ------------------------------------------------------------------
