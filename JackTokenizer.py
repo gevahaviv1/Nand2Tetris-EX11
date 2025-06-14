@@ -1,84 +1,113 @@
+"""Tokenizer for the Jack programming language."""
+
+from __future__ import annotations
+
 import re
 import typing
 
+
 class JackTokenizer:
+    """Tokenizes Jack source code for consumption by a compilation engine."""
+
+    _KEYWORDS = {
+        "class", "constructor", "function", "method", "field", "static",
+        "var", "int", "char", "boolean", "void", "true", "false", "null",
+        "this", "let", "do", "if", "else", "while", "return",
+    }
+
+    _SYMBOLS = {
+        "{", "}", "(", ")", "[", "]", ".", ",", ";",
+        "+", "-", "*", "/", "&", "|", "<", ">", "=", "~",
+    }
 
     def __init__(self, input_stream: typing.TextIO) -> None:
-        self._lines = input_stream.read().splitlines()
-        self._token_buffer = []
-        self._current_token = None
-        self._current_token_type = None
-        self._in_comment = False
-        self._prepare_tokensss()
+        """Read the entire input stream and prepare a token list."""
 
-    def _prepare_tokensss(self) -> None:
-        def remove_comments(text: str) -> str:
-            text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
-            text = re.sub(r"//.*", "", text)
-            return text
+        source = input_stream.read()
+        self._tokens = self._tokenize(source)
+        self._current_token: typing.Optional[str] = None
 
-        big_text = "\n".join(self._lines)
-        cleaned = remove_comments(big_text)
-        lines_no_comments = [line.strip() for line in cleaned.splitlines()]
-        cleaned_lines = filter(None, lines_no_comments)
+    # ------------------------------------------------------------------
+    # Tokenization utilities
+    # ------------------------------------------------------------------
+    def _tokenize(self, text: str) -> list[str]:
+        """Return a list of tokens extracted from ``text``."""
 
-        for line in cleaned_lines:
-            tokens = re.findall(r"[{}\[\]()\.,;\+\-\*/&|<>=~]|\w+|\".*?\"", line)
-            self._token_buffer.extend(tokens)
+        def remove_comments(source: str) -> str:
+            source = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
+            source = re.sub(r"//.*", "", source)
+            return source
+
+        cleaned_text = remove_comments(text)
+        tokens: list[str] = []
+        for line in cleaned_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = re.findall(r'[{}\[\]()\.,;\+\-\*/&|<>=~]|\w+|\".*?\"', line)
+            tokens.extend(parts)
+        return tokens
 
 
     def has_more_tokens(self) -> bool:
-        return len(self._token_buffer) > 0
+        """Return ``True`` if there are more tokens to consume."""
+
+        return bool(self._tokens)
 
     def advance(self) -> None:
+        """Advance to the next token if available."""
+
         if self.has_more_tokens():
-            self._current_token = self._token_buffer.pop(0)
-            self._current_token_type = self.token_type()
+            self._current_token = self._tokens.pop(0)
 
     def token_type(self) -> str:
-        keywords = {"class", "constructor", "function", "method", "field", "static", "var", "int", "char", "boolean", "void", "true", "false", "null", "this", "let", "do", "if", "else", "while", "return"}
-        symbols = {"{", "}", "(", ")", "[", "]", ".", ",", ";", "+", "-", "*", "/", "&", "|", "<", ">", "=", "~"}
+        """Return the Jack classification of the current token."""
 
-        if self._current_token in keywords:
+        if self._current_token is None:
+            raise ValueError("No current token. Call advance() first.")
+
+        token = self._current_token
+        if token in self._KEYWORDS:
             return "KEYWORD"
-        elif self._current_token in symbols:
+        if token in self._SYMBOLS:
             return "SYMBOL"
-        elif self._current_token.isdigit():
+        if token.isdigit():
             return "INT_CONST"
-        elif self._current_token.startswith('"') and self._current_token.endswith('"'):
+        if token.startswith('"') and token.endswith('"'):
             return "STRING_CONST"
-        else:
-            return "IDENTIFIER"
+        return "IDENTIFIER"
 
     def keyword(self) -> str:
+        """Return the current token assuming it is a keyword."""
         return self._current_token
 
     def symbol(self) -> str:
+        """Return the current token assuming it is a symbol."""
         return self._current_token
 
     def identifier(self) -> str:
+        """Return the current token assuming it is an identifier."""
         return self._current_token
 
     def int_val(self) -> int:
+        """Return the integer value of the current token."""
         return int(self._current_token)
 
     def string_val(self) -> str:
+        """Return the string value of the current token without quotes."""
         return self._current_token.strip('"')
 
     def get_next_token(self) -> typing.Optional[str]:
-        return self._token_buffer[0] if self._token_buffer else None
+        """Peek at the next token without consuming it."""
+        return self._tokens[0] if self._tokens else None
 
     def get_token_string(self) -> str:
+        """Return a string representation of the current token."""
+
         token_type = self.token_type()
-        if token_type == "KEYWORD":
-            return self.keyword()
-        elif token_type == "SYMBOL":
-            return self.symbol()
-        elif token_type == "IDENTIFIER":
-            return self.identifier()
-        elif token_type == "INT_CONST":
+        if token_type == "INT_CONST":
             return str(self.int_val())
-        elif token_type == "STRING_CONST":
+        if token_type == "STRING_CONST":
             return self.string_val()
-        return ""
+        return self._current_token
 
