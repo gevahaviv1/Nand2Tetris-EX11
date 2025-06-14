@@ -10,8 +10,6 @@ import sys
 import typing
 from CompilationEngine import CompilationEngine
 from JackTokenizer import JackTokenizer
-from SymbolTable import SymbolTable
-from VMWriter import VMWriter
 
 
 def compile_file(
@@ -24,10 +22,11 @@ def compile_file(
     """
 
     tokenizer = JackTokenizer(input_file)
-    vm_writer = VMWriter(output_file)
 
     # The constructor recursively compiles the entire class.
-    CompilationEngine(tokenizer, vm_writer)
+    # CompilationEngine currently outputs XML directly using the provided
+    # stream, so we pass the raw output file.
+    CompilationEngine(tokenizer, output_file)
 
 if "__main__" == __name__:
     # Parses the input path and calls compile_file on each input file.

@@ -26,17 +26,6 @@ class JackTokenizer:
             tokens = re.findall(r"[{}\[\]()\.,;\+\-\*/&|<>=~]|\w+|\".*?\"", line)
             self._token_buffer.extend(tokens)
 
-    def _prepare_tokensss(self) -> None:
-        def remove_comments(line: str) -> str:
-            return re.sub(r"//.*|/\*.*?\*/", "", line, flags=re.DOTALL)
-
-        lines_no_comments = [remove_comments(line).strip() for line in self._lines]
-        cleaned_lines = filter(None, lines_no_comments)
-
-        for line in cleaned_lines:
-            tokens = re.findall(r"[{}\[\]()\.,;\+\-\*/&|<>=~]|\w+|\".*?\"", line)
-            for token in tokens:
-                self._token_buffer.append(token)
 
     def has_more_tokens(self) -> bool:
         return len(self._token_buffer) > 0

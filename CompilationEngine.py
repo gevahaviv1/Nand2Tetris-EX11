@@ -21,6 +21,13 @@ class CompilationEngine:
         self.output_stream = output_stream
         self._indent_count = 0
 
+        # Prime the tokenizer and immediately compile the class so that
+        # users of this class only need to instantiate it in order to
+        # generate the output.
+        if self.tokenizer.has_more_tokens():
+            self.tokenizer.advance()
+            self.compile_class()
+
     def compile_class(self) -> None:
         self._write_outer_tag("class")
         self._write_token("KEYWORD")
