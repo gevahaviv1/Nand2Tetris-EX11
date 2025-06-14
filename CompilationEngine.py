@@ -5,7 +5,6 @@ unit tests and basic programs. The engine relies on ``JackTokenizer`` for
 tokens and ``VMWriter`` for writing the resulting commands.
 """
 
-import typing
 from JackTokenizer import JackTokenizer
 from VMWriter import VMWriter
 from SymbolTable import SymbolTable
