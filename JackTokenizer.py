@@ -9,9 +9,9 @@ class JackTokenizer:
         self._current_token = None
         self._current_token_type = None
         self._in_comment = False
-        self._prepare_tokens()
+        self._prepare_tokensss()
 
-    def _prepare_tokens(self) -> None:
+    def _prepare_tokensss(self) -> None:
         def remove_comments(text: str) -> str:
             text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
             text = re.sub(r"//.*", "", text)
