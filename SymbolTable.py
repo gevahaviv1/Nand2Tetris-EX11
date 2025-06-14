@@ -67,17 +67,18 @@ class SymbolTable:
             self._sub_scope[name] = entry
 
     def var_count(self, kind: str) -> int:
-        """
-        Args:
-            kind (str): can be "STATIC", "FIELD", "ARG", "VAR".
+        """Returns how many identifiers of ``kind`` have been defined.
 
-        Returns:
-            int: the number of variables of the given kind already defined in 
-            the current scope.
+        In accordance with the nand2tetris specification, ``STATIC`` and
+        ``FIELD`` counters are maintained at the class level, while ``ARG`` and
+        ``VAR`` counters are reset for every subroutine.  Therefore this method
+        simply exposes the relevant counter value.
+
+        Args:
+            kind (str): ``STATIC``, ``FIELD``, ``ARG`` or ``VAR``.
         """
         kind = kind.upper()
-        return self._counters.get(kind, 0) if kind in self._SUB_KINDS else \
-               sum(s.kind == kind for s in self._class_scope.values())
+        return self._counters.get(kind, 0)
 
     def kind_of(self, name: str) -> str:
         """

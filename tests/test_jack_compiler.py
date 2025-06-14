@@ -25,31 +25,9 @@ def test_compile_basic_class():
     CompilationEngine(tokenizer, output)
     result = output.getvalue().strip().splitlines()
     expected = [
-        "<class>",
-        "  <keyword> class </keyword>",
-        "  <identifier> Main </identifier>",
-        "  <symbol> { </symbol>",
-        "  <subroutineDec>",
-        "    <keyword> function </keyword>",
-        "    <keyword> void </keyword>",
-        "    <identifier> main </identifier>",
-        "    <symbol> ( </symbol>",
-        "    <parameterList>",
-        "      </parameterList>",
-        "    <symbol> ) </symbol>",
-        "    <subroutineBody>",
-        "      <symbol> { </symbol>",
-        "      <statements>",
-        "        <returnStatement>",
-        "          <keyword> return </keyword>",
-        "          <symbol> ; </symbol>",
-        "          </returnStatement>",
-        "        </statements>",
-        "      <symbol> } </symbol>",
-        "      </subroutineBody>",
-        "    </subroutineDec>",
-        "  <symbol> } </symbol>",
-        "  </class>",
+        "function Main.main 0",
+        "push constant 0",
+        "return",
     ]
     assert result == expected
 
