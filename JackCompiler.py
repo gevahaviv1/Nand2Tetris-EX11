@@ -14,7 +14,7 @@ from JackTokenizer import JackTokenizer
 
 def compile_file(
         input_file: typing.TextIO, output_file: typing.TextIO) -> None:
-    """Compiles a single file.
+    """Compiles a single file and writes its XML parse tree.
 
     Args:
         input_file (typing.TextIO): the file to compile.
@@ -47,7 +47,8 @@ if "__main__" == __name__:
         filename, extension = os.path.splitext(input_path)
         if extension.lower() != ".jack":
             continue
-        output_path = filename + ".vm"
+        # Output is the XML parse tree, so use the .xml extension.
+        output_path = filename + ".xml"
         with open(input_path, 'r') as input_file, \
                 open(output_path, 'w') as output_file:
             compile_file(input_file, output_file)
