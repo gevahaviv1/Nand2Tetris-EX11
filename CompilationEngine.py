@@ -1,289 +1,323 @@
 """
-This file is part of nand2tetris, as taught in The Hebrew University, and
-was written by Aviv Yaish. It is an extension to the specifications given
-[here](https://www.nand2tetris.org), as allowed by the Creative Common
-Attribution-NonCommercial-ShareAlike 3.0 Unported License.
+Compilation engine that generates VM code according to the Jack
+specification. Only a subset of the language is supported – enough for the
+unit tests and basic programs. The engine relies on ``JackTokenizer`` for
+tokens and ``VMWriter`` for writing the resulting commands.
 """
+
 import typing
+from JackTokenizer import JackTokenizer
+from VMWriter import VMWriter
+from SymbolTable import SymbolTable
+
 
 class CompilationEngine:
-
-    TOKEN_TYPE_MAP = {
-        "KEYWORD":        "keyword",
-        "SYMBOL":         "symbol",
-        "IDENTIFIER":     "identifier",
-        "INT_CONST":      "integerConstant",
-        "STRING_CONST":   "stringConstant"
-        }
-
-    def __init__(self, input_stream: "JackTokenizer", output_stream) -> None:
+    def __init__(self, input_stream: JackTokenizer, output_stream) -> None:
         self.tokenizer = input_stream
-        self.output_stream = output_stream
-        self._indent_count = 0
+        self.writer = VMWriter(output_stream)
+        self.symbol_table = SymbolTable()
+        self.class_name: str = ""
 
-        # Prime the tokenizer and immediately compile the class so that
-        # users of this class only need to instantiate it in order to
-        # generate the output.
         if self.tokenizer.has_more_tokens():
             self.tokenizer.advance()
             self.compile_class()
 
+    # ------------------------------------------------------------------
+    # High level compile routines
+    # ------------------------------------------------------------------
     def compile_class(self) -> None:
-        self._write_outer_tag("class")
-        self._write_token("KEYWORD")
-        self._write_token("IDENTIFIER")
-        self._write_token("SYMBOL")
+        self._expect_value("class")
+        self.class_name = self._expect_type("IDENTIFIER")
+        self._expect_value("{")
 
         while self._is_class_var_dec():
             self.compile_class_var_dec()
-
         while self._is_subroutine():
             self.compile_subroutine()
 
-        self._write_token("SYMBOL")
-        self._write_outer_tag("class", end=True)
+        self._expect_value("}")
 
     def compile_class_var_dec(self) -> None:
-        self._write_outer_tag("classVarDec")
-        self._write_token("KEYWORD")
-        self._write_type()
-        self._write_token("IDENTIFIER")
-
+        kind = self._expect_type("KEYWORD").upper()  # static | field
+        var_type = self._read_type()
+        name = self._expect_type("IDENTIFIER")
+        self.symbol_table.define(name, var_type, kind)
         while self._is_symbol(","):
-            self._write_token("SYMBOL")
-            self._write_token("IDENTIFIER")
-
-        self._write_token("SYMBOL")
-        self._write_outer_tag("classVarDec", end=True)
+            self._expect_value(",")
+            name = self._expect_type("IDENTIFIER")
+            self.symbol_table.define(name, var_type, kind)
+        self._expect_value(";")
 
     def compile_subroutine(self) -> None:
-        self._write_outer_tag("subroutineDec")
-        self._write_token("KEYWORD")
-        self._write_type()
-        self._write_token("IDENTIFIER")
-        self._write_token("SYMBOL")
+        subroutine_kind = self._expect_type("KEYWORD")  # constructor|function|method
+        self.symbol_table.start_subroutine()
+        if subroutine_kind == "method":
+            self.symbol_table.define("this", self.class_name, "ARG")
+
+        self._read_type(allow_void=True)
+        name = self._expect_type("IDENTIFIER")
+        self._expect_value("(")
         self.compile_parameter_list()
-        self._write_token("SYMBOL")
-        self._write_outer_tag("subroutineBody")
-        self._write_token("SYMBOL")
-        
+        self._expect_value(")")
+
+        self._expect_value("{")
         while self._is_var_dec():
             self.compile_var_dec()
 
+        n_locals = self.symbol_table.var_count("VAR")
+        self.writer.write_function(f"{self.class_name}.{name}", n_locals)
+
+        if subroutine_kind == "constructor":
+            n_fields = self.symbol_table.var_count("FIELD")
+            self.writer.write_push("CONST", n_fields)
+            self.writer.write_call("Memory.alloc", 1)
+            self.writer.write_pop("POINTER", 0)
+        elif subroutine_kind == "method":
+            self.writer.write_push("ARG", 0)
+            self.writer.write_pop("POINTER", 0)
+
         self.compile_statements()
-        self._write_token("SYMBOL")
-        self._write_outer_tag("subroutineBody", end=True)
-        self._write_outer_tag("subroutineDec", end=True)
+        self._expect_value("}")
 
     def compile_parameter_list(self) -> None:
-        self._write_outer_tag("parameterList")
         if not self._is_symbol(")"):
-            self._write_type()
-            self._write_token("IDENTIFIER")
+            var_type = self._read_type()
+            name = self._expect_type("IDENTIFIER")
+            self.symbol_table.define(name, var_type, "ARG")
             while self._is_symbol(","):
-                self._write_token("SYMBOL")
-                self._write_type()
-                self._write_token("IDENTIFIER")
-        self._write_outer_tag("parameterList", end=True)
+                self._expect_value(",")
+                var_type = self._read_type()
+                name = self._expect_type("IDENTIFIER")
+                self.symbol_table.define(name, var_type, "ARG")
 
     def compile_var_dec(self) -> None:
-        self._write_outer_tag("varDec")
-        self._write_token("KEYWORD")
-        self._write_type()
-        self._write_token("IDENTIFIER")
-
+        self._expect_value("var")
+        var_type = self._read_type()
+        name = self._expect_type("IDENTIFIER")
+        self.symbol_table.define(name, var_type, "VAR")
         while self._is_symbol(","):
-            self._write_token("SYMBOL")
-            self._write_token("IDENTIFIER")
-
-        self._write_token("SYMBOL")
-        self._write_outer_tag("varDec", end=True)
+            self._expect_value(",")
+            name = self._expect_type("IDENTIFIER")
+            self.symbol_table.define(name, var_type, "VAR")
+        self._expect_value(";")
 
     def compile_statements(self) -> None:
-        self._write_outer_tag("statements")
-        while self._is_statement():
+        while True:
             if self._is_keyword("let"):
                 self.compile_let()
-            elif self._is_keyword("if"):
-                self.compile_if()
-            elif self._is_keyword("while"):
-                self.compile_while()
             elif self._is_keyword("do"):
                 self.compile_do()
             elif self._is_keyword("return"):
                 self.compile_return()
+            else:
+                break
 
-        self._write_outer_tag("statements", end=True)
-
+    # ------------------------------------------------------------------
+    # Statements
+    # ------------------------------------------------------------------
     def compile_do(self) -> None:
-        self._write_outer_tag("doStatement")
-        self._write_token("KEYWORD")
+        self._expect_value("do")
         self.compile_subroutine_call()
-        self._write_token("SYMBOL")
-        self._write_outer_tag("doStatement", end=True)
+        self.writer.write_pop("TEMP", 0)
+        self._expect_value(";")
 
     def compile_let(self) -> None:
-        self._write_outer_tag("letStatement")
-        self._write_token("KEYWORD")
-        self._write_token("IDENTIFIER")
-
+        self._expect_value("let")
+        name = self._expect_type("IDENTIFIER")
+        is_array = False
         if self._is_symbol("["):
-            self._write_token("SYMBOL")
+            is_array = True
+            self._expect_value("[")
             self.compile_expression()
-            self._write_token("SYMBOL")
-
-        self._write_token("SYMBOL")
+            self._expect_value("]")
+            self._push_var(name)
+            self.writer.write_arithmetic("add")
+        self._expect_value("=")
         self.compile_expression()
-        self._write_token("SYMBOL")
-        self._write_outer_tag("letStatement", end=True)
+        self._expect_value(";")
 
-    def compile_while(self) -> None:
-        self._write_outer_tag("whileStatement")
-        self._write_token("KEYWORD")
-        self._write_token("SYMBOL")
-        self.compile_expression()
-        self._write_token("SYMBOL")
-        self._write_token("SYMBOL")
-        self.compile_statements()
-        self._write_token("SYMBOL")
-        self._write_outer_tag("whileStatement", end=True)
+        if is_array:
+            self.writer.write_pop("TEMP", 0)
+            self.writer.write_pop("POINTER", 1)
+            self.writer.write_push("TEMP", 0)
+            self.writer.write_pop("THAT", 0)
+        else:
+            self._pop_var(name)
 
     def compile_return(self) -> None:
-        self._write_outer_tag("returnStatement")
-        self._write_token("KEYWORD")
-
+        self._expect_value("return")
         if not self._is_symbol(";"):
             self.compile_expression()
+        else:
+            self.writer.write_push("CONST", 0)
+        self._expect_value(";")
+        self.writer.write_return()
 
-        self._write_token("SYMBOL")
-        self._write_outer_tag("returnStatement", end=True)
-
-    def compile_if(self) -> None:
-        self._write_outer_tag("ifStatement")
-        self._write_token("KEYWORD")
-        self._write_token("SYMBOL")
-        self.compile_expression()
-        self._write_token("SYMBOL")
-        self._write_token("SYMBOL")
-        self.compile_statements()
-        self._write_token("SYMBOL")
-
-        if self._is_keyword("else"):
-            self._write_token("KEYWORD")
-            self._write_token("SYMBOL")
-            self.compile_statements()
-            self._write_token("SYMBOL")
-
-        self._write_outer_tag("ifStatement", end=True)
-
+    # ------------------------------------------------------------------
+    # Expressions
+    # ------------------------------------------------------------------
     def compile_expression(self) -> None:
-        self._write_outer_tag("expression")
         self.compile_term()
-
-        while self._is_operator():
-            self._write_token("SYMBOL")
+        while self._is_op():
+            op = self._expect_type("SYMBOL")
             self.compile_term()
-
-        self._write_outer_tag("expression", end=True)
+            self._write_arithmetic(op)
 
     def compile_term(self) -> None:
-        self._write_outer_tag("term")
-
-        if self._is_integer_constant() or self._is_string_constant() or self._is_keyword_constant():
-            self._write_token(self.tokenizer.token_type())
-
+        if self._is_integer_constant():
+            val = int(self._expect_type("INT_CONST"))
+            self.writer.write_push("CONST", val)
+        elif self._is_string_constant():
+            text = self._expect_type("STRING_CONST")
+            self.writer.write_push("CONST", len(text))
+            self.writer.write_call("String.new", 1)
+            for ch in text:
+                self.writer.write_push("CONST", ord(ch))
+                self.writer.write_call("String.appendChar", 2)
+        elif self._is_keyword_constant():
+            kw = self._expect_type("KEYWORD")
+            if kw in ("false", "null"):
+                self.writer.write_push("CONST", 0)
+            elif kw == "true":
+                self.writer.write_push("CONST", 0)
+                self.writer.write_arithmetic("not")
+            elif kw == "this":
+                self.writer.write_push("POINTER", 0)
         elif self._is_symbol("("):
-            self._write_token("SYMBOL")
+            self._expect_value("(")
             self.compile_expression()
-            self._write_token("SYMBOL")
-
+            self._expect_value(")")
         elif self._is_unary_op():
-            self._write_token("SYMBOL")
+            op = self._expect_type("SYMBOL")
             self.compile_term()
-
-        elif self._is_identifier():
-            identifier = self.tokenizer.get_token_string()
-            self.tokenizer.advance()
-
-            if self._is_symbol("["):
-                self._write_xml_identifier(identifier)
-                self._write_token("SYMBOL")
-                self.compile_expression()
-                self._write_token("SYMBOL")
-            elif self._is_symbol("(") or self._is_symbol("."):
-                self._compile_subroutine_call_with_peeked_identifier(identifier)
+            if op == "-":
+                self.writer.write_arithmetic("neg")
             else:
-                self._write_xml_identifier(identifier)
-
+                self.writer.write_arithmetic("not")
+        elif self._is_identifier():
+            ident = self._expect_type("IDENTIFIER")
+            if self._is_symbol("["):
+                self._expect_value("[")
+                self.compile_expression()
+                self._expect_value("]")
+                self._push_var(ident)
+                self.writer.write_arithmetic("add")
+                self.writer.write_pop("POINTER", 1)
+                self.writer.write_push("THAT", 0)
+            elif self._is_symbol("(") or self._is_symbol("."):
+                self._compile_subroutine_call_with_peek(ident)
+            else:
+                self._push_var(ident)
         else:
-            raise ValueError("compile_term: Unexpected token in term.")
+            raise ValueError("Unexpected term")
 
-        self._write_outer_tag("term", end=True)
-
-    def compile_expression_list(self) -> None:
-        self._write_outer_tag("expressionList")
+    def compile_expression_list(self) -> int:
+        n_args = 0
         if not self._is_symbol(")"):
             self.compile_expression()
+            n_args += 1
             while self._is_symbol(","):
-                self._write_token("SYMBOL")
+                self._expect_value(",")
                 self.compile_expression()
-
-        self._write_outer_tag("expressionList", end=True)
-
-    def _compile_subroutine_call_with_peeked_identifier(self, first_identifier: str) -> None:
-        self._write_xml_identifier(first_identifier)
-        if self._is_symbol("."):
-            self._write_token("SYMBOL")
-            self._write_token("IDENTIFIER")
-
-        self._write_token("SYMBOL")
-        self.compile_expression_list()
-        self._write_token("SYMBOL")
+                n_args += 1
+        return n_args
 
     def compile_subroutine_call(self) -> None:
-        if self._is_identifier():
-            first_id = self.tokenizer.get_token_string()
-            self.tokenizer.advance()
-            self._compile_subroutine_call_with_peeked_identifier(first_id)
+        if not self._is_identifier():
+            raise ValueError("Expected identifier in subroutine call")
+        ident = self._expect_type("IDENTIFIER")
+        self._compile_subroutine_call_with_peek(ident)
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def _compile_subroutine_call_with_peek(self, first: str) -> None:
+        n_args = 0
+        if self._is_symbol("."):
+            self._expect_value(".")
+            sub_name = self._expect_type("IDENTIFIER")
+            if self.symbol_table.kind_of(first):
+                self._push_var(first)
+                obj_type = self.symbol_table.type_of(first)
+                full_name = f"{obj_type}.{sub_name}"
+                n_args += 1
+            else:
+                full_name = f"{first}.{sub_name}"
         else:
-            raise ValueError("compile_subroutine_call: expected IDENTIFIER for subroutine name/var.")
+            full_name = f"{self.class_name}.{first}"
+            self.writer.write_push("POINTER", 0)
+            n_args += 1
+        self._expect_value("(")
+        n_args += self.compile_expression_list()
+        self._expect_value(")")
+        self.writer.write_call(full_name, n_args)
 
-    def _write_token(self, expected_type: str) -> None:
-        token_type = self.tokenizer.token_type()
-        if token_type != expected_type:
-            raise ValueError(f"Expected token type {expected_type}, got {token_type}")
+    def _push_var(self, name: str) -> None:
+        kind = self.symbol_table.kind_of(name)
+        segment = self._kind_to_segment(kind)
+        index = self.symbol_table.index_of(name)
+        self.writer.write_push(segment, index)
 
-        token_value = self.tokenizer.get_token_string()
-        token_value = self._escape_xml(token_value)
+    def _pop_var(self, name: str) -> None:
+        kind = self.symbol_table.kind_of(name)
+        segment = self._kind_to_segment(kind)
+        index = self.symbol_table.index_of(name)
+        self.writer.write_pop(segment, index)
 
-        token_type_lower = self.TOKEN_TYPE_MAP.get(token_type, token_type.lower())
+    @staticmethod
+    def _kind_to_segment(kind: str) -> str:
+        return {
+            "STATIC": "STATIC",
+            "FIELD": "THIS",
+            "ARG": "ARG",
+            "VAR": "LOCAL",
+        }[kind]
 
-        self.output_stream.write(
-            f"{'  ' * self._indent_count}<{token_type_lower}> {token_value} </{token_type_lower}>\n"
-        )
-        
+    def _write_arithmetic(self, op: str) -> None:
+        mapping = {
+            "+": "add",
+            "-": "sub",
+            "*": ("call", "Math.multiply", 2),
+            "/": ("call", "Math.divide", 2),
+            "&": "and",
+            "|": "or",
+            "<": "lt",
+            ">": "gt",
+            "=": "eq",
+        }
+        cmd = mapping[op]
+        if isinstance(cmd, tuple):
+            _, name, n = cmd
+            self.writer.write_call(name, n)
+        else:
+            self.writer.write_arithmetic(cmd)
+
+    # ------------------------------------------------------------------
+    # Token handling helpers
+    # ------------------------------------------------------------------
+    def _read_type(self, allow_void: bool = False) -> str:
+        if self._is_keyword("void") and allow_void:
+            return self._expect_type("KEYWORD")
+        if self._is_keyword("int") or self._is_keyword("char") or \
+           self._is_keyword("boolean"):
+            return self._expect_type("KEYWORD")
+        return self._expect_type("IDENTIFIER")
+
+    def _expect_type(self, ttype: str) -> str:
+        if self.tokenizer.token_type() != ttype:
+            raise ValueError(f"Expected {ttype}, got {self.tokenizer.token_type()}")
+        value = self.tokenizer.get_token_string()
+        self.tokenizer.advance()
+        return value
+
+    def _expect_value(self, value: str) -> None:
+        if self.tokenizer.get_token_string() != value:
+            raise ValueError(f"Expected '{value}', got '{self.tokenizer.get_token_string()}'")
         self.tokenizer.advance()
 
-    def _escape_xml(self, text: str) -> str:
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    def _write_outer_tag(self, tag: str, end: bool = False) -> None:
-        if end:
-            self.output_stream.write(f"{'  ' * self._indent_count}</{tag}>\n")
-            self._indent_count -= 1
-        else:
-            self.output_stream.write(f"{'  ' * self._indent_count}<{tag}>\n")
-            self._indent_count += 1
-
-    def _write_type(self) -> None:
-        ttype = self.tokenizer.token_type()
-        if ttype not in ("KEYWORD", "IDENTIFIER"):
-            raise ValueError(f"Expected type to be KEYWORD or IDENTIFIER, got {ttype}")
-        self._write_token(ttype)
-
-    def _write_xml_identifier(self, ident: str) -> None:
-        self.output_stream.write(f"{'  ' * self._indent_count}<identifier> {ident} </identifier>\n")
-
+    # ------------------------------------------------------------------
+    # Token classification helpers (mostly copied from the previous version)
+    # ------------------------------------------------------------------
     def _is_class_var_dec(self) -> bool:
         return self._is_keyword("static") or self._is_keyword("field")
 
@@ -295,35 +329,13 @@ class CompilationEngine:
     def _is_var_dec(self) -> bool:
         return self._is_keyword("var")
 
-    def _is_statement(self) -> bool:
-        return (self._is_keyword("let") or self._is_keyword("if") or
-                self._is_keyword("while") or self._is_keyword("do") or
-                self._is_keyword("return"))
-
-    def _is_operator(self) -> bool:
-        if self.tokenizer.token_type() != "SYMBOL":
-            return False
-        return self.tokenizer.get_token_string() in {"+", "-", "*", "/", "&", "|", "<", ">", "=", "^", "#"}
-
-    def _is_unary_op(self) -> bool:
-        if self.tokenizer.token_type() != "SYMBOL":
-            return False
-        return self.tokenizer.get_token_string() in {"-", "~"}
-
-    def _is_keyword_constant(self) -> bool:
-        if self.tokenizer.token_type() != "KEYWORD":
-            return False
-        return self.tokenizer.get_token_string() in {"true", "false", "null", "this"}
+    def _is_keyword(self, keyword: str) -> bool:
+        return self.tokenizer.token_type() == "KEYWORD" and \
+               self.tokenizer.get_token_string() == keyword
 
     def _is_symbol(self, symbol: str) -> bool:
-        if self.tokenizer.token_type() != "SYMBOL":
-            return False
-        return (self.tokenizer.get_token_string() == symbol)
-
-    def _is_keyword(self, keyword: str) -> bool:
-        if self.tokenizer.token_type() != "KEYWORD":
-            return False
-        return (self.tokenizer.get_token_string() == keyword)
+        return self.tokenizer.token_type() == "SYMBOL" and \
+               self.tokenizer.get_token_string() == symbol
 
     def _is_integer_constant(self) -> bool:
         return self.tokenizer.token_type() == "INT_CONST"
@@ -333,4 +345,16 @@ class CompilationEngine:
 
     def _is_identifier(self) -> bool:
         return self.tokenizer.token_type() == "IDENTIFIER"
+
+    def _is_keyword_constant(self) -> bool:
+        return self.tokenizer.token_type() == "KEYWORD" and \
+               self.tokenizer.get_token_string() in {"true", "false", "null", "this"}
+
+    def _is_unary_op(self) -> bool:
+        return self.tokenizer.token_type() == "SYMBOL" and \
+               self.tokenizer.get_token_string() in {"-", "~"}
+
+    def _is_op(self) -> bool:
+        return self.tokenizer.token_type() == "SYMBOL" and \
+               self.tokenizer.get_token_string() in {"+", "-", "*", "/", "&", "|", "<", ">", "="}
 
