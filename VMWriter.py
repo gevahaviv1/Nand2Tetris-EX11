@@ -41,7 +41,7 @@ class VMWriter:
         "shiftleft", "shiftright",
     }
 
-    def __init__(self, output_stream: typing.TextIO) -> None:
+    def __init__(self, output_stream: TextIO) -> None:
         """Creates a new file and prepares it for writing VM commands."""
         self._out: TextIO = output_stream
 

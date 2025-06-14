@@ -13,6 +13,7 @@ from SymbolTable import SymbolTable
 class CompilationEngine:
     def __init__(self, input_stream: JackTokenizer, output_stream) -> None:
         self.tokenizer = input_stream
+
         self.writer = VMWriter(output_stream)
         self.symbol_table = SymbolTable()
         self.class_name: str = ""
@@ -20,6 +21,15 @@ class CompilationEngine:
         # Prime the tokenizer and immediately compile the class. If the
         # tokenizer has already advanced before this constructor is called,
         # we should not advance it again.
+
+        self.output_stream = output_stream
+        self._indent_count = 0
+
+        # Prime the tokenizer and immediately compile the class so that
+        # users of this class only need to instantiate it in order to
+        # generate the output. If the tokenizer has already been advanced
+        # before this constructor is called, we should not advance it again.
+
         if getattr(self.tokenizer, "_current_token", None) is None:
             if self.tokenizer.has_more_tokens():
                 self.tokenizer.advance()
