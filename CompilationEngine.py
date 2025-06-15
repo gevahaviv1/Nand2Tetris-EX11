@@ -25,6 +25,7 @@ class CompilationEngine:
 
         self.output_stream = output_stream
         self._indent_count = 0
+        self._label_counter = 0
 
         # Prime the tokenizer and immediately compile the class so that
         # users of this class only need to instantiate it in order to
@@ -124,6 +125,10 @@ class CompilationEngine:
                 self.compile_do()
             elif self._is_keyword("return"):
                 self.compile_return()
+            elif self._is_keyword("while"):
+                self.compile_while()
+            elif self._is_keyword("if"):
+                self.compile_if()
             else:
                 break
 
@@ -167,6 +172,47 @@ class CompilationEngine:
             self.writer.write_push("CONST", 0)
         self._expect_value(";")
         self.writer.write_return()
+
+    def compile_while(self) -> None:
+        self._expect_value("while")
+        start_label = self._new_label("WHILE_EXP")
+        end_label = self._new_label("WHILE_END")
+        self.writer.write_label(start_label)
+        self._expect_value("(")
+        self.compile_expression()
+        self._expect_value(")")
+        self.writer.write_arithmetic("not")
+        self.writer.write_if(end_label)
+        self._expect_value("{")
+        self.compile_statements()
+        self._expect_value("}")
+        self.writer.write_goto(start_label)
+        self.writer.write_label(end_label)
+
+    def compile_if(self) -> None:
+        self._expect_value("if")
+        true_label = self._new_label("IF_TRUE")
+        false_label = self._new_label("IF_FALSE")
+        end_label = self._new_label("IF_END")
+        self._expect_value("(")
+        self.compile_expression()
+        self._expect_value(")")
+        self.writer.write_if(true_label)
+        self.writer.write_goto(false_label)
+        self.writer.write_label(true_label)
+        self._expect_value("{")
+        self.compile_statements()
+        self._expect_value("}")
+        if self._is_keyword("else"):
+            self.writer.write_goto(end_label)
+            self.writer.write_label(false_label)
+            self._expect_value("else")
+            self._expect_value("{")
+            self.compile_statements()
+            self._expect_value("}")
+            self.writer.write_label(end_label)
+        else:
+            self.writer.write_label(false_label)
 
     # ------------------------------------------------------------------
     # Expressions
@@ -299,6 +345,8 @@ class CompilationEngine:
             "<": "lt",
             ">": "gt",
             "=": "eq",
+            "<<": "shiftleft",
+            ">>": "shiftright",
         }
         cmd = mapping[op]
         if isinstance(cmd, tuple):
@@ -306,6 +354,11 @@ class CompilationEngine:
             self.writer.write_call(name, n)
         else:
             self.writer.write_arithmetic(cmd)
+
+    def _new_label(self, base: str) -> str:
+        label = f"{base}{self._label_counter}"
+        self._label_counter += 1
+        return label
 
     # ------------------------------------------------------------------
     # Token handling helpers
@@ -374,6 +427,9 @@ class CompilationEngine:
                self.tokenizer.get_token_string() in {"-", "~"}
 
     def _is_op(self) -> bool:
-        return self.tokenizer.token_type() == "SYMBOL" and \
-               self.tokenizer.get_token_string() in {"+", "-", "*", "/", "&", "|", "<", ">", "="}
+        return (
+            self.tokenizer.token_type() == "SYMBOL"
+            and self.tokenizer.get_token_string()
+            in {"+", "-", "*", "/", "&", "|", "<", ">", "=", "<<", ">>"}
+        )
 
