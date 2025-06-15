@@ -118,7 +118,7 @@ class SymbolTable:
     # Debug helpers                                                          #
     # ---------------------------------------------------------------------- #
     def __str__(self) -> str:
-        """Nicely formatted snapshot – handy while developing / debugging."""
+        """Nicely formatted snapshot - handy while developing / debugging."""
         lines: list[str] = []
         for scope_name, scope in (("class", self._class_scope),
                                   ("sub",   self._sub_scope)):

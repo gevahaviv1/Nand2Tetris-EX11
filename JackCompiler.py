@@ -14,7 +14,7 @@ from JackTokenizer import JackTokenizer
 
 def compile_file(
         input_file: typing.TextIO, output_file: typing.TextIO) -> None:
-    """Compiles a single file and writes its XML parse tree.
+    """Compile ``input_file`` into VM code or XML and write it to ``output_file``.
 
     Args:
         input_file (typing.TextIO): the file to compile.
@@ -23,9 +23,9 @@ def compile_file(
 
     tokenizer = JackTokenizer(input_file)
 
-    # The constructor recursively compiles the entire class.
-    # CompilationEngine currently outputs XML directly using the provided
-    # stream, so we pass the raw output file.
+    # The constructor recursively compiles the entire class. ``CompilationEngine``
+    # decides whether to emit VM code or an XML parse tree based on whether the
+    # tokenizer has been advanced prior to its creation.
     CompilationEngine(tokenizer, output_file)
 
 if "__main__" == __name__:
@@ -47,8 +47,9 @@ if "__main__" == __name__:
         filename, extension = os.path.splitext(input_path)
         if extension.lower() != ".jack":
             continue
-        # Output is the XML parse tree, so use the .xml extension.
-        output_path = filename + ".xml"
+        # Unless the tokenizer has been advanced beforehand (XML mode),
+        # CompilationEngine emits VM code, so generate a .vm file.
+        output_path = filename + ".vm"
         with open(input_path, 'r') as input_file, \
                 open(output_path, 'w') as output_file:
             compile_file(input_file, output_file)
