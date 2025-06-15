@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 import typing
 
-from errors import JackSyntaxError
+
+class JackSyntaxError(Exception):
+    """Raised when the input Jack code has malformed syntax."""
+    pass
 
 
 class JackTokenizer:
