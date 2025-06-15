@@ -20,6 +20,7 @@ class JackTokenizer:
     _SYMBOLS = {
         "{", "}", "(", ")", "[", "]", ".", ",", ";",
         "+", "-", "*", "/", "&", "|", "<", ">", "=", "~",
+        "<<", ">>",
     }
 
     def __init__(self, input_stream: typing.TextIO) -> None:
@@ -47,7 +48,7 @@ class JackTokenizer:
         cleaned = remove_comments(text)
         tokens: list[str] = []
         token_re = re.compile(
-            r"[{}\[\]()\.,;\+\-\*/&|<>=~]|\d+|[A-Za-z_]\w*|\"[^\"]*\""
+            r"<<|>>|[{}\[\]()\.,;\+\-\*/&|<>=~]|\d+|[A-Za-z_]\w*|\"[^\"]*\""
         )
 
         for line_no, line in enumerate(cleaned.splitlines(), start=1):
